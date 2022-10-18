@@ -11,6 +11,8 @@ import sys
 import time
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from pathlib import Path
+from dataclasses import dataclass
 
 import git
 import psutil
@@ -23,6 +25,7 @@ import numpy as np
 from magnum import shaders, text
 from magnum.platform.glfw import Application
 from viewer_settings import default_sim_settings, make_cfg
+import pandas as pd
 
 import habitat_sim
 from habitat_sim import physics
@@ -39,6 +42,12 @@ output_path = os.path.join(dir_path, output_directory)
 if not os.path.exists(output_path):
     os.mkdir(output_path)
 
+
+@dataclass
+class ObjectAnnotation:
+    obj_name: str
+    is_usable: bool
+    comment: str
 
 class MemoryUnitConverter:
     """
@@ -290,6 +299,8 @@ class HabitatSimInteractiveViewer(Application):
             and self.cfg.sim_cfg.scene_id.lower() != "none"
         ):
             self.navmesh_config_and_recompute()
+
+        self.object_annotations: Dict[str, ObjectAnnotation] = {}
 
         self.time_since_last_simulation = 0.0
         LoggingContext.reinitialize_from_env()
@@ -645,6 +656,7 @@ class HabitatSimInteractiveViewer(Application):
         # warning: ctrl doesn't always pass through with other key-presses
 
         if key == pressed.ESC:
+            self.cleanup()
             event.accepted = True
             self.exit_event(Application.ExitEvent)
             return
@@ -911,7 +923,20 @@ class HabitatSimInteractiveViewer(Application):
 
                 self.save_video_file()
 
+        elif key == pressed.J:
+            index = int(input("Enter the object index to jump to: "))
+            self.jump_to_object(index)
+
         elif key == pressed.ONE:
+            self.object_annotations[self.obj_name] = ObjectAnnotation(self.obj_name, True, "")
+            print_in_color("Marked current object as usable", PrintColors.YELLOW, logging=True)
+
+        elif key == pressed.TWO:
+            comment = input("Object is being marked as unusable, what issue(s) does it have? (optional, press Enter to leave empty) ")
+            self.object_annotations[self.obj_name] = ObjectAnnotation(self.obj_name, False, comment)
+            print_in_color("Marked current object as unusable", PrintColors.YELLOW, logging=True)
+
+        elif key == pressed.SEVEN:
             # Apply impulse to dataset object if it exists and it is Dynamic motion mode
             if self.curr_object and self.simulating:
                 print_in_color(
@@ -935,7 +960,7 @@ class HabitatSimInteractiveViewer(Application):
                     logging=True,
                 )
 
-        elif key == pressed.TWO:
+        elif key == pressed.EIGHT:
             # Apply force to dataset object if it exists and it is Dynamic motion mode
             if self.curr_object and self.simulating:
                 print_in_color(
@@ -959,7 +984,7 @@ class HabitatSimInteractiveViewer(Application):
                     logging=True,
                 )
 
-        elif key == pressed.THREE:
+        elif key == pressed.NINE:
             # Apply impulse torque to dataset object if it exists and it is Dynamic motion mode
             if self.curr_object and self.simulating:
                 print_in_color(
@@ -981,7 +1006,7 @@ class HabitatSimInteractiveViewer(Application):
                     logging=True,
                 )
 
-        elif key == pressed.FOUR:
+        elif key == pressed.ZERO:
             # Apply torque to dataset object if it exists and it is Dynamic motion mode
             if self.curr_object and self.simulating:
                 print_in_color(
@@ -1284,6 +1309,18 @@ class HabitatSimInteractiveViewer(Application):
             self.navmesh_settings,
             include_static_objects=True,
         )
+
+    def jump_to_object(self, index: int) -> None:
+        keep_simulating = self.simulating
+        self.object_template_handle_index = index
+        self.add_new_object_from_dataset(
+            self.object_template_handle_index,
+            HabitatSimInteractiveViewer.DEFAULT_OBJ_POSITION,
+        )
+        if keep_simulating:
+            # make sure physics stays on, but place object upright in center of table
+            self.simulating = True
+            self.snap_down_object(self.curr_object)
 
     def cycle_dataset_object(self, index_delta: int = 1) -> None:
         keep_simulating = self.simulating
@@ -1817,19 +1854,40 @@ Key Commands:
     'v':        (physics) Invert gravity.
     'i':        Go backward through dataset of objects and generate current object above table.
     'p':        Go forward through dataset of objects and generate current object above table.
+    'j':        Jump to specific object in dataset of objects and generate current object above table.
     'o':        Turn on physics and snap current object onto the surface below it.
     'l':        Press 'L' to start recording, then 'L' again to stop recording
     't':        Load URDF from filepath
                 (+SHIFT) quick re-load the previously specified URDF
                 (+ALT) load the URDF with fixed base
-    '1':        Apply impulse to current object.
-    '2':        Apply force to current object.
-    '3':        Apply impulse torque to current object.
-    '4':        Apply torque to current object.
+    '7':        Apply impulse to current object.
+    '8':        Apply force to current object.
+    '9':        Apply impulse torque to current object.
+    '0':        Apply torque to current object.
+    '1':        Annotate current object as usable.
+    '2':        Annotate current object as unusable and optionally write a note.
 =====================================================
 """
         )
 
+    def cleanup(self) -> None:
+        self.write_object_annotations()
+
+    def write_object_annotations(self) -> None:
+        if not self.object_annotations:
+            return
+
+        new_annotations = pd.DataFrame(self.object_annotations.values()).set_index("obj_name")
+
+        annotations_file = self.sim_settings["annotations_file"]
+        if annotations_file.is_file():
+            old_annotations = pd.read_csv(annotations_file, sep="\t", index_col="obj_name")
+            merged = pd.concat([old_annotations, new_annotations])
+            merged = merged[~merged.index.duplicated(keep="last")]
+        else:
+            merged = new_annotations
+
+        merged.to_csv(annotations_file, sep="\t")
 
 class MouseMode(Enum):
     LOOK = 0
@@ -2018,6 +2076,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Override configured lighting to use synthetic lighting for the stage.",
     )
+    parser.add_argument(
+        "--annotations_file",
+        default=Path("data/object_viewer_anns.csv"),
+        type=Path
+    )
 
     args = parser.parse_args()
 
@@ -2028,6 +2091,7 @@ if __name__ == "__main__":
     sim_settings["enable_physics"] = not args.disable_physics
     sim_settings["sensor_height"] = HabitatSimInteractiveViewer.DEFAULT_SENSOR_HEIGHT
     sim_settings["stage_requires_lighting"] = args.stage_requires_lighting
+    sim_settings["annotations_file"] = args.annotations_file
 
     # start the application
     HabitatSimInteractiveViewer(sim_settings).exec()
