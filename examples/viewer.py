@@ -302,6 +302,8 @@ class HabitatSimInteractiveViewer(Application):
 
         self.object_annotations: Dict[str, ObjectAnnotation] = {}
 
+        self.object_metadata = np.load(sim_settings["object_metadata_file"], allow_pickle=True).item()
+
         self.time_since_last_simulation = 0.0
         LoggingContext.reinitialize_from_env()
         logger.setLevel("INFO")
@@ -468,8 +470,8 @@ class HabitatSimInteractiveViewer(Application):
 
         # # If in Kinematic movement mode and there is a ManagedBulletRigidObject
         # # that is displayed from the dataset, rotate it
-        # if self.curr_object is not None and not self.simulating:
-        #     self.rotate_displayed_object(self.curr_object)
+        if self.curr_object is not None and not self.simulating:
+            self.rotate_displayed_object(self.curr_object)
 
         # TODO testing awake functionality
         if (
@@ -1410,6 +1412,8 @@ class HabitatSimInteractiveViewer(Application):
         # for some reason they all end in "_:0000" so remove that substring before print
         self.obj_name = self.curr_object.handle.replace("_:0000", "")
 
+        self.obj_cat = self.object_metadata.get(self.obj_name, None)["cat"]
+
         # store RAM memory used for this object if not already stored
         if self.obj_ram_memory_used.get(self.obj_name) == None:
             self.obj_ram_memory_used[self.obj_name] = ram_memory_used_bytes
@@ -1789,6 +1793,7 @@ avg render time ratio: {self.avg_render_duration}
 sensor type: {str(sensor_spec.sensor_type.name).lower()}
 sensor subtype: {str(sensor_spec.sensor_subtype.name).lower()}
 curr obj: {self.obj_name if self.curr_object is not None else "None"}
+curr obj category: {self.obj_cat if self.curr_object is not None and self.obj_cat is not None else "None"}
 obj RAM usage: {ram_usage_string}
 {str(self.mouse_interaction).lower()}
             """
@@ -2081,6 +2086,11 @@ if __name__ == "__main__":
         default=Path("data/object_viewer_anns.csv"),
         type=Path
     )
+    parser.add_argument(
+        "--object_metadata_file",
+        default=Path("data/scale_rots_all.npy"),
+        type=Path
+    )
 
     args = parser.parse_args()
 
@@ -2092,6 +2102,7 @@ if __name__ == "__main__":
     sim_settings["sensor_height"] = HabitatSimInteractiveViewer.DEFAULT_SENSOR_HEIGHT
     sim_settings["stage_requires_lighting"] = args.stage_requires_lighting
     sim_settings["annotations_file"] = args.annotations_file
+    sim_settings["object_metadata_file"] = args.object_metadata_file
 
     # start the application
     HabitatSimInteractiveViewer(sim_settings).exec()
