@@ -46,7 +46,9 @@ if not os.path.exists(output_path):
 @dataclass
 class ObjectAnnotation:
     obj_name: str
+    obj_cat: str
     is_usable: bool
+    issue_id: int
     comment: str
 
 class MemoryUnitConverter:
@@ -92,7 +94,7 @@ class HabitatSimInteractiveViewer(Application):
     # the maximum number of chars displayable in the app window
     # using the magnum text module. These chars are used to
     # display the CPU/GPU usage data
-    MAX_DISPLAY_TEXT_CHARS = 256
+    MAX_DISPLAY_TEXT_CHARS = 512
 
     # how much to displace window text relative to the center of the
     # app window (e.g if you want the display text in the top left of
@@ -301,6 +303,11 @@ class HabitatSimInteractiveViewer(Application):
             self.navmesh_config_and_recompute()
 
         self.object_annotations: Dict[str, ObjectAnnotation] = {}
+
+        annotations_file = self.sim_settings["annotations_file"]
+        if annotations_file.is_file():
+            annotations = pd.read_csv(annotations_file, sep="\t", na_filter=False).to_dict("records")
+            self.object_annotations = {ann["obj_name"]: ObjectAnnotation(**ann) for ann in annotations}
 
         self.object_metadata = np.load(sim_settings["object_metadata_file"], allow_pickle=True).item()
 
@@ -930,13 +937,46 @@ class HabitatSimInteractiveViewer(Application):
             self.jump_to_object(index)
 
         elif key == pressed.ONE:
-            self.object_annotations[self.obj_name] = ObjectAnnotation(self.obj_name, True, "")
+            self.object_annotations[self.obj_name] = ObjectAnnotation(self.obj_name, self.obj_cat_detailed, True, 0, "")
             print_in_color("Marked current object as usable", PrintColors.YELLOW, logging=True)
 
         elif key == pressed.TWO:
-            comment = input("Object is being marked as unusable, what issue(s) does it have? (optional, press Enter to leave empty) ")
-            self.object_annotations[self.obj_name] = ObjectAnnotation(self.obj_name, False, comment)
+            issue = input(
+                """
+Object is being marked as unusable, what issue(s) does it have?
+    1) Object is too big to pick up with one hand
+    2) Object is actually multiple objects
+    3) Physics issues (ill-fitting bounding box, center of gravity off, out-of-control reactions to forces, etc.)
+    4) Visual issues (problem with textures, lighting, etc.) making it hard to discern the object
+    5) Hard/impossible to tell what the object is based off visuals (without reading text on the object)
+    6) Other
+Enter 1-6: """
+                )
+            is_valid_issue = False
+            while not is_valid_issue:
+                try:
+                    issue = int(issue)
+                    assert 1 <= issue <= 6
+                except ValueError:
+                    issue = input("Issue needs to be a number from 1-6: ")
+                else:
+                    is_valid_issue = True
+
+            if issue == 6:
+                comment = input("Describe the issue (optional, press Enter to leave empty): ")
+            else:
+                comment = input("Any additional comments? (optional, press Enter to leave empty): ")
+
+            self.object_annotations[self.obj_name] = ObjectAnnotation(self.obj_name, self.obj_cat_detailed, False, issue, comment)
             print_in_color("Marked current object as unusable", PrintColors.YELLOW, logging=True)
+
+        elif key == pressed.THREE:
+            obj_cat = input("Enter a new object name: ")
+            obj_ann = self.object_annotations.get(self.obj_name, ObjectAnnotation(self.obj_name, None, True, 0, ""))
+            obj_ann.obj_cat = obj_cat
+            self.obj_cat_detailed = obj_cat
+            self.object_annotations[self.obj_name] = obj_ann
+            print_in_color(f"Set current object name to: {obj_cat}", PrintColors.YELLOW, logging=True)
 
         elif key == pressed.SEVEN:
             # Apply impulse to dataset object if it exists and it is Dynamic motion mode
@@ -1412,7 +1452,17 @@ class HabitatSimInteractiveViewer(Application):
         # for some reason they all end in "_:0000" so remove that substring before print
         self.obj_name = self.curr_object.handle.replace("_:0000", "")
 
-        self.obj_cat = self.object_metadata.get(self.obj_name, None)["cat"]
+        obj_metadata = self.object_metadata.get(self.obj_name)
+        if obj_metadata:
+            self.obj_cat = obj_metadata["cat"]
+        else:
+            self.obj_cat = None
+
+        obj_ann = self.object_annotations.get(self.obj_name)
+        if obj_ann:
+            self.obj_cat_detailed = obj_ann.obj_cat
+        else:
+            self.obj_cat_detailed = self.obj_cat
 
         # store RAM memory used for this object if not already stored
         if self.obj_ram_memory_used.get(self.obj_name) == None:
@@ -1792,8 +1842,9 @@ avg sim time ratio: {self.avg_sim_duration if self.simulating else "N/A"}
 avg render time ratio: {self.avg_render_duration}
 sensor type: {str(sensor_spec.sensor_type.name).lower()}
 sensor subtype: {str(sensor_spec.sensor_subtype.name).lower()}
-curr obj: {self.obj_name if self.curr_object is not None else "None"}
+curr obj id: {self.obj_name if self.curr_object is not None else "None"}
 curr obj category: {self.obj_cat if self.curr_object is not None and self.obj_cat is not None else "None"}
+curr obj name: {self.obj_cat_detailed if self.curr_object is not None and self.obj_cat_detailed is not None else "None"}
 obj RAM usage: {ram_usage_string}
 {str(self.mouse_interaction).lower()}
             """
@@ -1871,6 +1922,7 @@ Key Commands:
     '0':        Apply torque to current object.
     '1':        Annotate current object as usable.
     '2':        Annotate current object as unusable and optionally write a note.
+    '3':        Give new name to current object.
 =====================================================
 """
         )
@@ -1882,17 +1934,8 @@ Key Commands:
         if not self.object_annotations:
             return
 
-        new_annotations = pd.DataFrame(self.object_annotations.values()).set_index("obj_name")
-
-        annotations_file = self.sim_settings["annotations_file"]
-        if annotations_file.is_file():
-            old_annotations = pd.read_csv(annotations_file, sep="\t", index_col="obj_name")
-            merged = pd.concat([old_annotations, new_annotations])
-            merged = merged[~merged.index.duplicated(keep="last")]
-        else:
-            merged = new_annotations
-
-        merged.to_csv(annotations_file, sep="\t")
+        annotations_df = pd.DataFrame(self.object_annotations.values()).set_index("obj_name")
+        annotations_df.to_csv(self.sim_settings["annotations_file"], sep="\t")
 
 class MouseMode(Enum):
     LOOK = 0
