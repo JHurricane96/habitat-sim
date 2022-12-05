@@ -48,7 +48,7 @@ class ObjectAnnotation:
     obj_name: str
     obj_cat: str
     is_usable: bool
-    issue_id: int
+    issue_ids: List[str]
     comment: str
 
 class MemoryUnitConverter:
@@ -937,42 +937,47 @@ class HabitatSimInteractiveViewer(Application):
             self.jump_to_object(index)
 
         elif key == pressed.ONE:
-            self.object_annotations[self.obj_name] = ObjectAnnotation(self.obj_name, self.obj_cat_detailed, True, 0, "")
+            self.object_annotations[self.obj_name] = ObjectAnnotation(self.obj_name, self.obj_cat_detailed, True, ["0"], "")
             print_in_color("Marked current object as usable", PrintColors.YELLOW, logging=True)
 
         elif key == pressed.TWO:
-            issue = input(
+            issues = input(
                 """
 Object is being marked as unusable, what issue(s) does it have?
     1) Object is too big to pick up with one hand
     2) Object is actually multiple objects
-    3) Physics issues (ill-fitting bounding box, center of gravity off, out-of-control reactions to forces, etc.)
+    3) Physics issues:
+        3a) Ill-fitting bounding box
+        3b) Center of gravity off
+        3c) Out-of-control reactions to forces
+        3d) Other
     4) Visual issues (problem with textures, lighting, etc.) making it hard to discern the object
     5) Hard/impossible to tell what the object is based off visuals (without reading text on the object)
     6) Other
-Enter 1-6: """
+Enter comma-separated values (e.g. 4, 3a, 1): """
                 )
             is_valid_issue = False
+            valid_issues = {"1", "2", "3a", "3b", "3c", "3d", "4", "5", "6"}
             while not is_valid_issue:
                 try:
-                    issue = int(issue)
-                    assert 1 <= issue <= 6
-                except ValueError:
-                    issue = input("Issue needs to be a number from 1-6: ")
+                    issues = issues.split(",")
+                    assert all(issue in valid_issues for issue in issues)
+                except AssertionError:
+                    issues = input("Issues needs to be comma-separated values: ")
                 else:
                     is_valid_issue = True
 
-            if issue == 6:
-                comment = input("Describe the issue (optional, press Enter to leave empty): ")
+            if "6" in issues:
+                comment = input("Describe the 'Other' issue (optional, press Enter to leave empty): ")
             else:
                 comment = input("Any additional comments? (optional, press Enter to leave empty): ")
 
-            self.object_annotations[self.obj_name] = ObjectAnnotation(self.obj_name, self.obj_cat_detailed, False, issue, comment)
+            self.object_annotations[self.obj_name] = ObjectAnnotation(self.obj_name, self.obj_cat_detailed, False, issues, comment)
             print_in_color("Marked current object as unusable", PrintColors.YELLOW, logging=True)
 
         elif key == pressed.THREE:
             obj_cat = input("Enter a new object name: ")
-            obj_ann = self.object_annotations.get(self.obj_name, ObjectAnnotation(self.obj_name, None, True, 0, ""))
+            obj_ann = self.object_annotations.get(self.obj_name, ObjectAnnotation(self.obj_name, None, True, ["0"], ""))
             obj_ann.obj_cat = obj_cat
             self.obj_cat_detailed = obj_cat
             self.object_annotations[self.obj_name] = obj_ann
