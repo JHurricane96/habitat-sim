@@ -1079,6 +1079,8 @@ Enter comma-separated values (e.g. 4, 3a, 1): """
                     logging=True,
                 )
 
+        self.write_object_annotations()
+
         # update map of moving/looking keys which are currently pressed
         if key in self.pressed:
             self.pressed[key] = True
