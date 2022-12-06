@@ -309,7 +309,7 @@ class HabitatSimInteractiveViewer(Application):
             annotations = pd.read_csv(annotations_file, sep="\t", na_filter=False).to_dict("records")
             self.object_annotations = {ann["obj_name"]: ObjectAnnotation(**ann) for ann in annotations}
 
-        self.object_metadata = np.load(sim_settings["object_metadata_file"], allow_pickle=True).item()
+        self.object_metadata = np.load(self.sim_settings["object_metadata_file"], allow_pickle=True).item()
 
         self.time_since_last_simulation = 0.0
         LoggingContext.reinitialize_from_env()
@@ -587,6 +587,10 @@ class HabitatSimInteractiveViewer(Application):
             logger.info("Setting synthetic lighting override for stage.")
             self.cfg.sim_cfg.override_scene_light_defaults = True
             self.cfg.sim_cfg.scene_light_setup = habitat_sim.gfx.DEFAULT_LIGHTING_KEY
+
+        if self.sim_settings["use_light_bg"]:
+            logger.info("Usng white background.")
+            self.cfg.agents[self.agent_id].sensor_specifications[0].clear_color = mn.Color4(0.5, 0.5, 0.5, 1)
 
         if self.sim is None:
             self.sim = habitat_sim.Simulator(self.cfg)
@@ -2130,6 +2134,11 @@ if __name__ == "__main__":
         help="Override configured lighting to use synthetic lighting for the stage.",
     )
     parser.add_argument(
+        "--use_light_bg",
+        action="store_true",
+        help="Use light background instead of black.",
+    )
+    parser.add_argument(
         "--annotations_file",
         default=Path("data/object_viewer_anns.csv"),
         type=Path
@@ -2151,6 +2160,7 @@ if __name__ == "__main__":
     sim_settings["stage_requires_lighting"] = args.stage_requires_lighting
     sim_settings["annotations_file"] = args.annotations_file
     sim_settings["object_metadata_file"] = args.object_metadata_file
+    sim_settings["use_light_bg"] = args.use_light_bg
 
     # start the application
     HabitatSimInteractiveViewer(sim_settings).exec()
