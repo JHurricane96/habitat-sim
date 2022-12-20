@@ -50,6 +50,7 @@ class ObjectAnnotation:
     is_usable: bool
     issue_ids: List[str]
     comment: str
+    obj_type: str
 
 class MemoryUnitConverter:
     """
@@ -941,7 +942,7 @@ class HabitatSimInteractiveViewer(Application):
             self.jump_to_object(index)
 
         elif key == pressed.ONE:
-            self.object_annotations[self.obj_name] = ObjectAnnotation(self.obj_name, self.obj_cat_detailed, True, ["0"], "")
+            self.object_annotations[self.obj_name] = ObjectAnnotation(self.obj_name, self.obj_cat_detailed, True, ["0"], "", self.obj_type)
             print_in_color("Marked current object as usable", PrintColors.YELLOW, logging=True)
 
         elif key == pressed.TWO:
@@ -976,7 +977,7 @@ Enter comma-separated values (e.g. 4, 3a, 1): """
             else:
                 comment = input("Any additional comments? (optional, press Enter to leave empty): ")
 
-            self.object_annotations[self.obj_name] = ObjectAnnotation(self.obj_name, self.obj_cat_detailed, False, issues, comment)
+            self.object_annotations[self.obj_name] = ObjectAnnotation(self.obj_name, self.obj_cat_detailed, False, issues, comment, self.obj_type)
             print_in_color("Marked current object as unusable", PrintColors.YELLOW, logging=True)
 
         elif key == pressed.THREE:
@@ -986,6 +987,24 @@ Enter comma-separated values (e.g. 4, 3a, 1): """
             self.obj_cat_detailed = obj_cat
             self.object_annotations[self.obj_name] = obj_ann
             print_in_color(f"Set current object name to: {obj_cat}", PrintColors.YELLOW, logging=True)
+
+        elif key == pressed.FOUR:
+            obj_type = input("Enter object type - movable, receptacle or other (m/r/o): ")
+            valid_obj_types = {"m", "r", "o"}
+            is_valid_obj_type = False
+            while not is_valid_obj_type:
+                if obj_type in valid_obj_types:
+                    is_valid_obj_type = True
+                else:
+                    obj_type = input("Input must be one of - m, r, o:")
+
+            self.obj_type = obj_type
+            obj_ann = self.object_annotations.get(self.obj_name)
+            if not obj_ann:
+                obj_ann = ObjectAnnotation(self.obj_name, self.obj_cat_detailed, True, ["0"], "", self.obj_type)
+            else:
+                obj_ann.obj_type = self.obj_type
+            self.object_annotations[self.obj_name] = obj_ann
 
         elif key == pressed.SEVEN:
             # Apply impulse to dataset object if it exists and it is Dynamic motion mode
@@ -1472,8 +1491,10 @@ Enter comma-separated values (e.g. 4, 3a, 1): """
         obj_ann = self.object_annotations.get(self.obj_name)
         if obj_ann:
             self.obj_cat_detailed = obj_ann.obj_cat
+            self.obj_type = obj_ann.obj_type
         else:
             self.obj_cat_detailed = self.obj_cat
+            self.obj_type = None
 
         # store RAM memory used for this object if not already stored
         if self.obj_ram_memory_used.get(self.obj_name) == None:
