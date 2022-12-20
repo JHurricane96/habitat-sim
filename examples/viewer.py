@@ -1867,6 +1867,11 @@ CPU Frequency
         self.shader.bind_vector_texture(self.glyph_cache.texture)
         self.shader.transformation_projection_matrix = self.window_text_transform
         self.shader.color = [1.0, 1.0, 1.0]
+        obj_type_map = {
+            "o": "other",
+            "r": "receptacle",
+            "m": "movable",
+        }
         self.window_text.render(
             f"""
 avg fps: {self.average_fps}
@@ -1877,6 +1882,7 @@ sensor subtype: {str(sensor_spec.sensor_subtype.name).lower()}
 curr obj id: {self.obj_name if self.curr_object is not None else "None"}
 curr obj category: {self.obj_cat if self.curr_object is not None and self.obj_cat is not None else "None"}
 curr obj name: {self.obj_cat_detailed if self.curr_object is not None and self.obj_cat_detailed is not None else "None"}
+curr obj type: {obj_type_map[self.obj_type] if self.curr_object is not None and self.obj_type is not None else "None"}
 obj RAM usage: {ram_usage_string}
 {str(self.mouse_interaction).lower()}
             """
