@@ -1961,6 +1961,7 @@ Key Commands:
     '1':        Annotate current object as usable.
     '2':        Annotate current object as unusable and optionally write a note.
     '3':        Give new name to current object.
+    '4':        Set object type for current object.
 =====================================================
 """
         )
