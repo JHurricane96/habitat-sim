@@ -982,7 +982,7 @@ Enter comma-separated values (e.g. 4, 3a, 1): """
 
         elif key == pressed.THREE:
             obj_cat = input("Enter a new object name: ")
-            obj_ann = self.object_annotations.get(self.obj_name, ObjectAnnotation(self.obj_name, None, True, ["0"], ""))
+            obj_ann = self.object_annotations.get(self.obj_name, ObjectAnnotation(self.obj_name, None, True, ["0"], "", self.obj_type))
             obj_ann.obj_cat = obj_cat
             self.obj_cat_detailed = obj_cat
             self.object_annotations[self.obj_name] = obj_ann
@@ -1882,7 +1882,7 @@ sensor subtype: {str(sensor_spec.sensor_subtype.name).lower()}
 curr obj id: {self.obj_name if self.curr_object is not None else "None"}
 curr obj category: {self.obj_cat if self.curr_object is not None and self.obj_cat is not None else "None"}
 curr obj name: {self.obj_cat_detailed if self.curr_object is not None and self.obj_cat_detailed is not None else "None"}
-curr obj type: {obj_type_map[self.obj_type] if self.curr_object is not None and self.obj_type is not None else "None"}
+curr obj type: {obj_type_map[self.obj_type] if self.curr_object is not None and self.obj_type else "None"}
 obj RAM usage: {ram_usage_string}
 {str(self.mouse_interaction).lower()}
             """
